@@ -1,0 +1,30 @@
+{
+  "name": "bisha-clinic",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "setup": "node setup.js",
+    "patch": "node patch.js",
+    "build:win": "electron-builder --win --publish never"
+  },
+  "build": {
+    "appId": "com.bisha.clinic",
+    "productName": "BishaClinic",
+    "directories": { "output": "dist" },
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "مركز بيشة عامر"
+    }
+  },
+  "devDependencies": {
+    "electron": "^28.3.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
+}
