@@ -12,8 +12,7 @@ let serverRunning = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1400, 
-    height: 900,
+    width: 1400, height: 900,
     title: 'مركز بيشة عامر للجراحة',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -26,21 +25,6 @@ function createWindow() {
   
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
-  
-  // السماح للنوافذ المنبثقة (الطباعة) بالفتح
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url === 'about:blank' || url.startsWith('data:')) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 800, height: 900, autoHideMenuBar: true,
-          webPreferences: { nodeIntegration: false, contextIsolation: true }
-        }
-      };
-    }
-    if (url.startsWith('http')) shell.openExternal(url);
-    return { action: 'deny' };
-  });
 }
 
 function getLocalIP() {
@@ -55,7 +39,7 @@ function getLocalIP() {
 
 async function startSyncServer(port) {
   if (serverInstance) return { success: true, alreadyRunning: true, port: serverPort, ip: getLocalIP() };
-
+  
   const dataDir = path.join(app.getPath('userData'), 'sync-data');
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   const dataFile = path.join(dataDir, 'database.json');
@@ -63,7 +47,7 @@ async function startSyncServer(port) {
   const serverApp = express();
   serverApp.use(cors({ origin: '*' }));
   serverApp.use(express.json({ limit: '100mb' }));
-
+  
   // السماح للموبايل والأجهزة التانية بفتح واجهة التطبيق
   serverApp.use(express.static(__dirname));
   serverApp.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
@@ -123,6 +107,23 @@ ipcMain.handle('stop-server', () => stopSyncServer());
 ipcMain.handle('get-server-status', () => ({
   running: serverRunning, port: serverPort, ip: serverRunning ? getLocalIP() : null
 }));
+
+// ⭐ الدالة الخاصة بالطباعة الاحترافية
+ipcMain.handle('print-window', async (event, htmlContent, options) => {
+  const printWindow = new BrowserWindow({ 
+    show: false, 
+    webPreferences: { nodeIntegration: false, contextIsolation: true } 
+  });
+  
+  await printWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
+  
+  return new Promise((resolve) => {
+    printWindow.webContents.print(options, (success, failureReason) => {
+      printWindow.close();
+      resolve({ success, failureReason });
+    });
+  });
+});
 
 app.whenReady().then(createWindow);
 
