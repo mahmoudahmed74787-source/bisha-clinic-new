@@ -24,12 +24,20 @@ function createWindow() {
     show: false
   });
   
-  // هنا التعديل: بيقرأ ملف index.html من غير مجلد renderer
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
-  
   mainWindow.once('ready-to-show', () => mainWindow.show());
   
+  // السماح للنوافذ المنبثقة (الطباعة) بالفتح
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url === 'about:blank' || url.startsWith('data:')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 800, height: 900, autoHideMenuBar: true,
+          webPreferences: { nodeIntegration: false, contextIsolation: true }
+        }
+      };
+    }
     if (url.startsWith('http')) shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -56,6 +64,10 @@ async function startSyncServer(port) {
   serverApp.use(cors({ origin: '*' }));
   serverApp.use(express.json({ limit: '100mb' }));
 
+  // السماح للموبايل والأجهزة التانية بفتح واجهة التطبيق
+  serverApp.use(express.static(__dirname));
+  serverApp.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
+
   serverApp.get('/sync', (req, res) => {
     try {
       if (fs.existsSync(dataFile)) res.json(JSON.parse(fs.readFileSync(dataFile, 'utf-8')));
@@ -68,10 +80,6 @@ async function startSyncServer(port) {
       fs.writeFileSync(dataFile, JSON.stringify(req.body, null, 2), 'utf-8');
       res.json({ success: true, timestamp: Date.now() });
     } catch (e) { res.status(500).json({ error: e.message }); }
-  });
-
-  serverApp.get('/status', (req, res) => {
-    res.json({ status: 'online', port: serverPort, ip: getLocalIP(), version: '1.0.0' });
   });
 
   return new Promise((resolve) => {
@@ -112,7 +120,6 @@ ipcMain.handle('open-file', async () => {
 
 ipcMain.handle('start-server', (event, port) => startSyncServer(port || 5000));
 ipcMain.handle('stop-server', () => stopSyncServer());
-ipcMain.handle('get-local-ip', () => getLocalIP());
 ipcMain.handle('get-server-status', () => ({
   running: serverRunning, port: serverPort, ip: serverRunning ? getLocalIP() : null
 }));
