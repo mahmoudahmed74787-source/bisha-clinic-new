@@ -1,8 +1,12 @@
-const https = require('https'); const fs = require('fs'); const path = require('path');
+const https = require('https'); 
+const fs = require('fs'); 
+const path = require('path');
+
 const ASSETS_DIR = path.join(__dirname, 'assets');
 if (!fs.existsSync(ASSETS_DIR)) fs.mkdirSync(ASSETS_DIR, { recursive: true });
 const WEBFONTS_DIR = path.join(ASSETS_DIR, 'webfonts');
 if (!fs.existsSync(WEBFONTS_DIR)) fs.mkdirSync(WEBFONTS_DIR, { recursive: true });
+
 function download(url, dest) {
   return new Promise((res, rej) => {
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (response) => {
@@ -12,6 +16,7 @@ function download(url, dest) {
     }).on('error', rej);
   });
 }
+
 function fetchText(url) {
   return new Promise((res, rej) => {
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (r) => {
@@ -20,6 +25,7 @@ function fetchText(url) {
     }).on('error', rej);
   });
 }
+
 async function setup() {
   try {
     let faCss = await fetchText('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
@@ -27,7 +33,8 @@ async function setup() {
     for (const f of ['fa-solid-900', 'fa-regular-400', 'fa-brands-400']) {
       await download(`https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/${f}.woff2`, path.join(WEBFONTS_DIR, `${f}.woff2`));
     }
-  } catch (e) { console.log('FontAwesome error'); }
+  } catch (e) { console.log('FontAwesome error', e); }
+  
   try {
     let cairoCss = await fetchText('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800;900&display=swap');
     const urls = [...cairoCss.matchAll(/url\((https:\/\/fonts\.gstatic\.com[^)]+)\)/g)];
@@ -38,6 +45,6 @@ async function setup() {
       cairoCss = cairoCss.replace(u[1], `webfonts/cairo-${i-1}.${ext}`);
     }
     fs.writeFileSync(path.join(ASSETS_DIR, 'cairo.css'), cairoCss);
-  } catch (e) { console.log('Cairo error'); }
+  } catch (e) { console.log('Cairo error', e); }
 }
 setup();
