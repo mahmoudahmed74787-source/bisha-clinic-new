@@ -6,5 +6,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFile: () => ipcRenderer.invoke('open-file'),
   startServer: (port) => ipcRenderer.invoke('start-server', port),
   stopServer: () => ipcRenderer.invoke('stop-server'),
-  getServerStatus: () => ipcRenderer.invoke('get-server-status')
+  getServerStatus: () => ipcRenderer.invoke('get-server-status'),
+  printWindow: (htmlContent, options) => ipcRenderer.invoke('print-window', htmlContent, options)
 });
