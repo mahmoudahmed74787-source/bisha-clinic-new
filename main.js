@@ -12,7 +12,8 @@ let serverRunning = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1400, height: 900,
+    width: 1400, 
+    height: 900,
     title: 'مركز بيشة عامر للجراحة',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -22,9 +23,16 @@ function createWindow() {
     autoHideMenuBar: true,
     show: false
   });
-  // هنا التعديل: هيقرأ ملف index.html من غير مجلد
+  
+  // هنا التعديل: بيقرأ ملف index.html من غير مجلد renderer
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  
   mainWindow.once('ready-to-show', () => mainWindow.show());
+  
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http')) shell.openExternal(url);
+    return { action: 'deny' };
+  });
 }
 
 function getLocalIP() {
@@ -38,7 +46,8 @@ function getLocalIP() {
 }
 
 async function startSyncServer(port) {
-  if (serverInstance) return { success: true, port: serverPort, ip: getLocalIP() };
+  if (serverInstance) return { success: true, alreadyRunning: true, port: serverPort, ip: getLocalIP() };
+
   const dataDir = path.join(app.getPath('userData'), 'sync-data');
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   const dataFile = path.join(dataDir, 'database.json');
@@ -48,36 +57,73 @@ async function startSyncServer(port) {
   serverApp.use(express.json({ limit: '100mb' }));
 
   serverApp.get('/sync', (req, res) => {
-    try { res.json(fs.existsSync(dataFile) ? JSON.parse(fs.readFileSync(dataFile, 'utf-8')) : {}); } 
-    catch (e) { res.status(500).json({ error: e.message }); }
+    try {
+      if (fs.existsSync(dataFile)) res.json(JSON.parse(fs.readFileSync(dataFile, 'utf-8')));
+      else res.json({});
+    } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
   serverApp.post('/sync', (req, res) => {
-    try { fs.writeFileSync(dataFile, JSON.stringify(req.body, null, 2), 'utf-8'); res.json({ success: true }); } 
-    catch (e) { res.status(500).json({ error: e.message }); }
+    try {
+      fs.writeFileSync(dataFile, JSON.stringify(req.body, null, 2), 'utf-8');
+      res.json({ success: true, timestamp: Date.now() });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  serverApp.get('/status', (req, res) => {
+    res.json({ status: 'online', port: serverPort, ip: getLocalIP(), version: '1.0.0' });
   });
 
   return new Promise((resolve) => {
-    serverInstance = serverApp.listen(port, '0.0.0.0', () => {
-      serverRunning = true; serverPort = port;
-      resolve({ success: true, port, ip: getLocalIP() });
-    });
+    try {
+      serverInstance = serverApp.listen(port, '0.0.0.0', () => {
+        serverRunning = true;
+        serverPort = port;
+        resolve({ success: true, port, ip: getLocalIP() });
+      });
+      serverInstance.on('error', (err) => resolve({ success: false, error: err.message }));
+    } catch (e) { resolve({ success: false, error: e.message }); }
   });
 }
 
-ipcMain.handle('save-file', async (e, content, defaultName) => {
-  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, { defaultPath: defaultName });
-  if (!canceled && filePath) { fs.writeFileSync(filePath, content, 'utf-8'); return filePath; }
-  return null;
+function stopSyncServer() {
+  if (serverInstance) { serverInstance.close(); serverInstance = null; serverRunning = false; }
+  return { success: true };
+}
+
+ipcMain.handle('save-file', async (event, content, defaultName) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: defaultName,
+    filters: [{ name: 'JSON Database', extensions: ['json'] }]
+  });
+  if (canceled || !filePath) return null;
+  fs.writeFileSync(filePath, content, 'utf-8');
+  return filePath;
 });
+
 ipcMain.handle('open-file', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow);
-  if (!canceled && filePaths[0]) return fs.readFileSync(filePaths[0], 'utf-8');
-  return null;
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'JSON Database', extensions: ['json'] }]
+  });
+  if (canceled || !filePaths[0]) return null;
+  return fs.readFileSync(filePaths[0], 'utf-8');
 });
-ipcMain.handle('start-server', (e, p) => startSyncServer(p || 5000));
-ipcMain.handle('stop-server', () => { if (serverInstance) { serverInstance.close(); serverInstance = null; } return { success: true }; });
-ipcMain.handle('get-server-status', () => ({ running: serverRunning, port: serverPort, ip: serverRunning ? getLocalIP() : null }));
+
+ipcMain.handle('start-server', (event, port) => startSyncServer(port || 5000));
+ipcMain.handle('stop-server', () => stopSyncServer());
+ipcMain.handle('get-local-ip', () => getLocalIP());
+ipcMain.handle('get-server-status', () => ({
+  running: serverRunning, port: serverPort, ip: serverRunning ? getLocalIP() : null
+}));
 
 app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+app.on('window-all-closed', () => {
+  stopSyncServer();
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
